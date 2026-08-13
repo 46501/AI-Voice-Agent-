@@ -78,10 +78,16 @@ export function useWebSocket({ url, onTranscript, onAudioResponse, onStateChange
     }
   }, []);
 
+  const sendInterrupt = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'interrupt' }));
+    }
+  }, []);
+
   useEffect(() => {
     connect();
     return () => disconnect();
   }, [connect, disconnect]);
 
-  return { isConnected, sendAudio, sendClear };
+  return { isConnected, sendAudio, sendClear, sendInterrupt };
 }

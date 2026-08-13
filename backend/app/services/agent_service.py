@@ -35,20 +35,30 @@ class AgentService:
         Returns the final AI text and tool trace.
         """
         history = self.get_session_history(session_id)
-        
-        # We append a new dictionary so we don't mutate unexpectedly
         history.append({"role": "user", "content": user_message})
-        
-        # Pass a copy to LLMService in case it mutates with tool calls
         messages_copy = list(history)
         
         final_text, tool_trace = await self.llm_service.generate_response(messages_copy)
         
-        # The LLM Service might have appended tool call messages to messages_copy
-        # We should update our history to match the resolved state.
         self.sessions[session_id] = messages_copy
-        
-        # Finally, append the final AI response
         self.sessions[session_id].append({"role": "assistant", "content": final_text})
         
         return final_text, tool_trace
+
+    async def process_message_stream(self, session_id: str, user_message: str):
+        """
+        Add user message, get streaming LLM response.
+        Yields tokens.
+        Updates session history at the end.
+        """
+        history = self.get_session_history(session_id)
+        history.append({"role": "user", "content": user_message})
+        messages_copy = list(history)
+        
+        full_response = ""
+        async for token in self.llm_service.generate_response_stream(messages_copy):
+            full_response += token
+            yield token
+            
+        self.sessions[session_id] = messages_copy
+        self.sessions[session_id].append({"role": "assistant", "content": full_response})

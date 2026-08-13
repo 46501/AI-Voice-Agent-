@@ -1,0 +1,105 @@
+.dev-toggle-btn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #333;
+  color: #00ffcc;
+  border: 1px solid #00ffcc;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  z-index: 1000;
+  font-weight: bold;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.dev-toggle-btn:hover {
+  opacity: 1;
+}
+
+.developer-panel {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 320px;
+  background: rgba(15, 15, 20, 0.95);
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 16px;
+  color: #fff;
+  font-family: monospace;
+  font-size: 0.85rem;
+  z-index: 1000;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  backdrop-filter: blur(10px);
+}
+
+.dev-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #333;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.dev-header h3 {
+  margin: 0;
+  color: #00ffcc;
+  font-size: 1rem;
+}
+
+.dev-header button {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+}
+
+.dev-header button:hover {
+  color: #fff;
+}
+
+.dev-section {
+  margin-bottom: 16px;
+}
+
+.dev-section h4 {
+  margin: 0 0 8px 0;
+  color: #aaa;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+}
+
+.dev-stat {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.status-ok { color: #00ffcc; }
+.status-err { color: #ff4444; }
+
+.state-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #333;
+}
+.state-badge.idle { color: #888; }
+.state-badge.listening { color: #00ffcc; background: rgba(0, 255, 204, 0.1); }
+.state-badge.thinking { color: #ff00ff; background: rgba(255, 0, 255, 0.1); }
+.state-badge.tool_calling { color: #ffaa00; background: rgba(255, 170, 0, 0.1); }
+.state-badge.speaking { color: #0088ff; background: rgba(0, 136, 255, 0.1); }
+.state-badge.interrupted { color: #ff4444; }
+.state-badge.error { color: #ff0000; font-weight: bold; }
+
+.total-latency {
+  border-top: 1px dashed #444;
+  padding-top: 6px;
+  margin-top: 6px;
+  font-weight: bold;
+  color: #00ffcc;
+}

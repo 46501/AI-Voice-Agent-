@@ -1,9 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from app.config import config
-from app.api.routes import voice, chat, health
+from app.api.routes import voice, chat, health, auth
+from app.database import engine, Base
 
-app = FastAPI(title="VoxAI Backend")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize database
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    await engine.dispose()
+
+app = FastAPI(title="VoxAI Backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -14,6 +24,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router, prefix="/api")
+app.include_router(auth.router, prefix="/api/auth")
 app.include_router(chat.router, prefix="/api")
 app.include_router(voice.router, prefix="/ws")
 

@@ -1,29 +1,31 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAudioRecorder } from './useAudioRecorder';
 import { useWebSocket } from './useWebSocket';
-import { AgentState, Message } from '../types/voice';
+import { AgentState, Message, LatencyMetrics } from '../types/voice';
 
 export function useVoiceAgent(websocketUrl: string) {
   const [state, setState] = useState<AgentState>('idle');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [latencyMetrics, setLatencyMetrics] = useState<LatencyMetrics>({});
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const silenceTimeoutRef = useRef<number | null>(null);
   const isSpeakingRef = useRef(false);
   
-  // Audio Playback Queue
   const audioQueueRef = useRef<ArrayBuffer[]>([]);
   const isPlayingRef = useRef(false);
   const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
+  // Turn ID management to discard stale audio
+  const activeTurnIdRef = useRef<string | null>(null);
+
   const VAD_SILENCE_MS = 1500;
-  const VAD_THRESHOLD = 10; // Adjust for sensitivity
+  const VAD_THRESHOLD = 10;
 
   const playNextInQueue = useCallback(async () => {
     if (audioQueueRef.current.length === 0) {
       isPlayingRef.current = false;
-      // If we finished playing everything and we are still in 'speaking' state, revert to idle
       setState((prev) => prev === 'speaking' ? 'idle' : prev);
       return;
     }
@@ -54,30 +56,45 @@ export function useVoiceAgent(websocketUrl: string) {
     }
   }, []);
 
-  const handleTranscript = useCallback((role: 'user' | 'ai', text: string) => {
-    // If partial update, we replace the last message if it's from the same role.
+  const handleTranscript = useCallback((role: 'user' | 'ai' | 'tool' | 'system', text: string, turnId?: string, isPartial?: boolean, metrics?: LatencyMetrics) => {
+    if (turnId) {
+        activeTurnIdRef.current = turnId;
+    }
+    
+    if (metrics) {
+        setLatencyMetrics(prev => ({ ...prev, ...metrics }));
+    }
+
     setMessages(prev => {
       const lastMsg = prev[prev.length - 1];
-      if (lastMsg && lastMsg.role === role) {
-        return [...prev.slice(0, -1), { ...lastMsg, text }];
+      if (lastMsg && lastMsg.role === role && lastMsg.turn_id === turnId) {
+        return [...prev.slice(0, -1), { ...lastMsg, text, isPartial, metrics: { ...lastMsg.metrics, ...metrics } }];
       } else {
-        return [...prev, { id: Date.now().toString(), role, text, timestamp: Date.now() }];
+        return [...prev, { id: Date.now().toString(), role, text, timestamp: Date.now(), turn_id: turnId, isPartial, metrics }];
       }
     });
   }, []);
 
-  const handleAudioResponse = useCallback((audioBuffer: ArrayBuffer) => {
+  const handleAudioResponse = useCallback((audioBuffer: ArrayBuffer, turnId?: string) => {
+    // If we have a way to verify turnId against activeTurnIdRef, we do it here.
+    // For now, if we receive audio and we are interrupted, we ignore it.
+    if (state === 'interrupted' || state === 'listening') return;
+    
     audioQueueRef.current.push(audioBuffer);
     if (!isPlayingRef.current) {
       playNextInQueue();
     }
-  }, [playNextInQueue]);
+  }, [playNextInQueue, state]);
+
+  const handleStateChange = useCallback((newState: AgentState) => {
+      setState(newState);
+  }, []);
 
   const { isConnected, sendAudio, sendClear, sendInterrupt } = useWebSocket({
     url: websocketUrl,
     onTranscript: handleTranscript,
     onAudioResponse: handleAudioResponse,
-    onStateChange: setState,
+    onStateChange: handleStateChange,
     onError: (msg) => {
       console.error(msg);
       setState('error');
@@ -101,14 +118,12 @@ export function useVoiceAgent(websocketUrl: string) {
     if (blob.size > 0) {
       sendAudio(blob);
     } else {
-      // If no valid audio but state was listening, revert to idle.
       setState(prev => prev === 'listening' ? 'idle' : prev);
     }
   }, [sendAudio]);
 
   const { isRecording, startRecording, stopRecording, stream } = useAudioRecorder(handleAudioReady);
 
-  // VAD Logic with Barge-in Support
   useEffect(() => {
     if (!isRecording || !stream) return;
 
@@ -117,7 +132,6 @@ export function useVoiceAgent(websocketUrl: string) {
     }
     const audioCtx = audioContextRef.current;
     
-    // Resume context if suspended
     if (audioCtx.state === 'suspended') {
         audioCtx.resume();
     }
@@ -144,16 +158,16 @@ export function useVoiceAgent(websocketUrl: string) {
       const average = sum / dataArray.length;
 
       if (average > VAD_THRESHOLD) {
-        // Voice detected!
         if (!isSpeakingRef.current) {
           isSpeakingRef.current = true;
           
-          // Barge-in logic: If AI is speaking, interrupt it!
-          if (isPlayingRef.current) {
+          if (isPlayingRef.current || state === 'speaking' || state === 'thinking') {
             console.log("Barge-in detected! Interrupting AI...");
             stopPlaybackAndClearQueue();
             sendInterrupt();
-            setState('listening');
+            setState('interrupted');
+            activeTurnIdRef.current = null;
+            setTimeout(() => setState('listening'), 100);
           }
         }
         
@@ -162,17 +176,13 @@ export function useVoiceAgent(websocketUrl: string) {
           silenceTimeoutRef.current = null;
         }
       } else {
-        // Silence detected
         if (isSpeakingRef.current && !silenceTimeoutRef.current) {
           silenceTimeoutRef.current = window.setTimeout(() => {
             isSpeakingRef.current = false;
-            // Only stop recording if we are actually listening for input
-            // If we barged in, state might be 'speaking', but we forced it to 'listening'.
-            // If it's already 'idle', do nothing.
             setState(currentState => {
                 if (currentState === 'listening') {
                     stopRecording();
-                    return 'idle'; // It will switch to 'processing_stt' via backend WS soon
+                    return 'idle'; 
                 }
                 return currentState;
             });
@@ -189,10 +199,9 @@ export function useVoiceAgent(websocketUrl: string) {
     return () => {
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
       if (silenceTimeoutRef.current) window.clearTimeout(silenceTimeoutRef.current);
-      // We don't close the audio context because we use it for playback too.
       try { source.disconnect(); } catch (e) {}
     };
-  }, [isRecording, stream, stopRecording, stopPlaybackAndClearQueue, sendInterrupt]);
+  }, [isRecording, stream, stopRecording, stopPlaybackAndClearQueue, sendInterrupt, state]);
 
   const startConversation = useCallback(() => {
     setState('listening');
@@ -203,17 +212,19 @@ export function useVoiceAgent(websocketUrl: string) {
     setState('idle');
     stopRecording();
     stopPlaybackAndClearQueue();
-    sendInterrupt(); // Tell backend to stop generating if it was
+    sendInterrupt();
   }, [stopRecording, stopPlaybackAndClearQueue, sendInterrupt]);
 
   const clearConversation = useCallback(() => {
     setMessages([]);
+    setLatencyMetrics({});
     sendClear();
   }, [sendClear]);
 
   return {
     state,
     messages,
+    latencyMetrics,
     isConnected,
     isRecording,
     startConversation,

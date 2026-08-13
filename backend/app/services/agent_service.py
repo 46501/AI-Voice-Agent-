@@ -57,8 +57,11 @@ class AgentService:
         
         full_response = ""
         async for token in self.llm_service.generate_response_stream(messages_copy):
-            full_response += token
-            yield token
+            if isinstance(token, dict):
+                yield token
+            else:
+                full_response += token
+                yield token
             
         self.sessions[session_id] = messages_copy
         self.sessions[session_id].append({"role": "assistant", "content": full_response})

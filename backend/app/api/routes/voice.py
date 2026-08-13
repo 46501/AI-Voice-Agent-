@@ -2,6 +2,9 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
 import asyncio
 import re
+import uuid
+import time
+from loguru import logger
 from app.services.agent_service import AgentService
 from app.services.stt_service import STTService
 from app.services.tts_service import TTSService
@@ -11,103 +14,158 @@ agent_service = AgentService()
 stt_service = STTService()
 tts_service = TTSService()
 
-# Regex to split on sentence endings (. ? ! optionally followed by quotes)
 SENTENCE_END_REGEX = re.compile(r'([.?!]["\']?)')
 
-async def process_voice_pipeline(websocket: WebSocket, session_id: str, audio_data: bytes):
-    """
-    Handles STT -> LLM Stream -> Sentence Chunking -> TTS Concurrency -> Audio dispatch
-    This runs as a cancelable Task.
-    """
+async def process_voice_pipeline(websocket: WebSocket, session_id: str, turn_id: str, audio_data: bytes):
     try:
+        t0 = time.time()
+        logger.info(f"[VOICE] session={session_id} turn={turn_id} state=STT_START")
+        await websocket.send_json({"type": "status", "status": "processing_stt", "turn_id": turn_id})
+        
         # 1. STT
-        await websocket.send_json({"type": "status", "status": "processing_stt"})
         transcript = await stt_service.transcribe(audio_data)
-        print(f"Transcript: {transcript}")
-        await websocket.send_json({"type": "transcript", "role": "user", "text": transcript})
+        stt_latency = int((time.time() - t0) * 1000)
+        logger.info(f"[VOICE] session={session_id} turn={turn_id} state=STT_DONE latency={stt_latency}ms transcript='{transcript}'")
+        
+        await websocket.send_json({
+            "type": "transcript", 
+            "role": "user", 
+            "text": transcript,
+            "turn_id": turn_id,
+            "metrics": {"stt_ms": stt_latency}
+        })
         
         if not transcript.strip():
-            await websocket.send_json({"type": "status", "status": "idle"})
+            await websocket.send_json({"type": "status", "status": "idle", "turn_id": turn_id})
             return
 
-        # 2. LLM Stream & TTS Dispatch
-        await websocket.send_json({"type": "status", "status": "thinking"})
+        # 2. LLM Stream
+        await websocket.send_json({"type": "status", "status": "thinking", "turn_id": turn_id})
+        logger.info(f"[VOICE] session={session_id} turn={turn_id} state=LLM_START")
         
+        t_llm_start = time.time()
         buffer = ""
         tts_tasks = []
         full_ai_text = ""
         has_started_speaking = False
+        first_token_latency = None
         
-        async def synthesize_and_send(text_chunk: str):
-            """Helper to synthesize a chunk and return the audio bytes."""
+        async def synthesize_and_send(text_chunk: str, chunk_index: int):
             if not text_chunk.strip():
                 return None
             try:
-                return await tts_service.synthesize(text_chunk)
+                t_tts_start = time.time()
+                audio_bytes = await tts_service.synthesize(text_chunk)
+                tts_latency = int((time.time() - t_tts_start) * 1000)
+                logger.info(f"[VOICE] session={session_id} turn={turn_id} chunk={chunk_index} state=TTS_DONE latency={tts_latency}ms text='{text_chunk}'")
+                return audio_bytes, tts_latency
             except Exception as e:
-                print(f"TTS Error on chunk: {e}")
-                return None
+                logger.error(f"[VOICE] TTS Error on chunk: {e}")
+                return None, 0
 
-        # Process the stream
+        chunk_counter = 0
+        first_audio_latency = None
+
         async for token in agent_service.process_message_stream(session_id, transcript):
+            if isinstance(token, dict) and token.get("type") == "tool_call":
+                logger.info(f"[VOICE] session={session_id} turn={turn_id} state=TOOL_CALL tool={token['name']}")
+                await websocket.send_json({
+                    "type": "transcript",
+                    "role": "tool",
+                    "text": f"Using {token['name']}...",
+                    "turn_id": turn_id
+                })
+                continue
+                
+            if first_token_latency is None:
+                first_token_latency = int((time.time() - t_llm_start) * 1000)
+                logger.info(f"[VOICE] session={session_id} turn={turn_id} state=LLM_FIRST_TOKEN latency={first_token_latency}ms")
+                
             buffer += token
             full_ai_text += token
             
-            # Send transcript update to UI incrementally (optional, but good for UX)
-            # For simplicity, we can send a "partial_transcript" or just wait.
-            # Let's send the full text so far as a single message to update the bubble.
-            await websocket.send_json({"type": "transcript", "role": "ai", "text": full_ai_text, "partial": True})
+            await websocket.send_json({
+                "type": "transcript", 
+                "role": "ai", 
+                "text": full_ai_text, 
+                "partial": True, 
+                "turn_id": turn_id
+            })
             
-            # Check for sentence boundaries
             if SENTENCE_END_REGEX.search(buffer):
-                # Split at the first sentence boundary
                 parts = SENTENCE_END_REGEX.split(buffer, 1)
-                sentence = parts[0] + parts[1] # text + punctuation
+                sentence = parts[0] + parts[1]
                 buffer = parts[2] if len(parts) > 2 else ""
                 
-                # Dispatch TTS task for this sentence
-                tts_tasks.append(asyncio.create_task(synthesize_and_send(sentence)))
+                chunk_counter += 1
+                tts_tasks.append(asyncio.create_task(synthesize_and_send(sentence, chunk_counter)))
                 
-                # If this is the first chunk, we can immediately wait for it and send it to reduce TTFB
                 if not has_started_speaking and len(tts_tasks) == 1:
-                    audio_bytes = await tts_tasks[0]
-                    if audio_bytes:
-                        await websocket.send_json({"type": "status", "status": "speaking"})
+                    result = await tts_tasks[0]
+                    if result and result[0]:
+                        audio_bytes, tts_ms = result
+                        if first_audio_latency is None:
+                            first_audio_latency = int((time.time() - t0) * 1000)
+                            logger.info(f"[VOICE] session={session_id} turn={turn_id} state=FIRST_AUDIO_READY total_latency={first_audio_latency}ms")
+                        
+                        await websocket.send_json({
+                            "type": "status", 
+                            "status": "speaking", 
+                            "turn_id": turn_id,
+                            "metrics": {"llm_first_token_ms": first_token_latency, "first_audio_ms": first_audio_latency, "tts_ms": tts_ms}
+                        })
                         await websocket.send_bytes(audio_bytes)
                     has_started_speaking = True
-                    tts_tasks.pop(0) # Remove it since we processed it
+                    tts_tasks.pop(0)
         
-        # Process any remaining text in buffer
         if buffer.strip():
-            tts_tasks.append(asyncio.create_task(synthesize_and_send(buffer)))
+            chunk_counter += 1
+            tts_tasks.append(asyncio.create_task(synthesize_and_send(buffer, chunk_counter)))
             
-        # Await and send remaining TTS tasks in order
         for task in tts_tasks:
-            audio_bytes = await task
-            if audio_bytes:
+            result = await task
+            if result and result[0]:
+                audio_bytes, tts_ms = result
                 if not has_started_speaking:
-                    await websocket.send_json({"type": "status", "status": "speaking"})
+                    if first_audio_latency is None:
+                        first_audio_latency = int((time.time() - t0) * 1000)
+                    await websocket.send_json({
+                        "type": "status", 
+                        "status": "speaking", 
+                        "turn_id": turn_id,
+                        "metrics": {"llm_first_token_ms": first_token_latency, "first_audio_ms": first_audio_latency, "tts_ms": tts_ms}
+                    })
                     has_started_speaking = True
                 await websocket.send_bytes(audio_bytes)
                 
-        # Final transcript update to mark it as complete
-        await websocket.send_json({"type": "transcript", "role": "ai", "text": full_ai_text, "partial": False})
-        await websocket.send_json({"type": "status", "status": "idle"})
+        total_latency = int((time.time() - t0) * 1000)
+        logger.info(f"[VOICE] session={session_id} turn={turn_id} state=TURN_COMPLETE total_latency={total_latency}ms")
+        
+        await websocket.send_json({
+            "type": "transcript", 
+            "role": "ai", 
+            "text": full_ai_text, 
+            "partial": False, 
+            "turn_id": turn_id,
+            "metrics": {"total_ms": total_latency}
+        })
+        await websocket.send_json({"type": "status", "status": "idle", "turn_id": turn_id})
         
     except asyncio.CancelledError:
-        print(f"Pipeline cancelled for session {session_id}")
+        logger.warning(f"[VOICE] session={session_id} turn={turn_id} state=INTERRUPTED")
         raise
     except Exception as e:
-        print(f"Pipeline Error: {e}")
-        await websocket.send_json({"type": "error", "message": "Failed to process voice."})
+        logger.error(f"[VOICE] session={session_id} turn={turn_id} state=ERROR error='{e}'")
+        await websocket.send_json({"type": "error", "message": "Failed to process voice.", "turn_id": turn_id})
 
 @router.websocket("/voice")
 async def voice_websocket(websocket: WebSocket):
     await websocket.accept()
-    session_id = "default-session"
-    print(f"WebSocket connected: {session_id}")
+    session_id = str(uuid.uuid4())
+    logger.info(f"[WEBSOCKET] Connected session={session_id}")
     
     current_task: asyncio.Task | None = None
+    active_turn_id: str | None = None
     
     try:
         while True:
@@ -115,13 +173,14 @@ async def voice_websocket(websocket: WebSocket):
             
             if "bytes" in message:
                 audio_data = message["bytes"]
-                print(f"Received audio blob of size {len(audio_data)} bytes")
+                turn_id = str(uuid.uuid4())
+                active_turn_id = turn_id
                 
-                # Cancel any existing task (implicit barge-in logic if they send audio early)
                 if current_task and not current_task.done():
+                    logger.info(f"[WEBSOCKET] session={session_id} received audio while task running. Cancelling previous task.")
                     current_task.cancel()
                     
-                current_task = asyncio.create_task(process_voice_pipeline(websocket, session_id, audio_data))
+                current_task = asyncio.create_task(process_voice_pipeline(websocket, session_id, turn_id, audio_data))
                 
             elif "text" in message:
                 try:
@@ -132,16 +191,17 @@ async def voice_websocket(websocket: WebSocket):
                         agent_service.clear_session(session_id)
                         await websocket.send_json({"type": "status", "status": "cleared"})
                     elif data.get("type") == "interrupt":
-                        print("Interrupt received! Cancelling current task.")
+                        logger.info(f"[WEBSOCKET] session={session_id} received explicit INTERRUPT")
                         if current_task and not current_task.done():
                             current_task.cancel()
+                        active_turn_id = None
                         await websocket.send_json({"type": "status", "status": "idle"})
                 except json.JSONDecodeError:
                     pass
 
     except WebSocketDisconnect:
-        print(f"WebSocket disconnected: {session_id}")
+        logger.info(f"[WEBSOCKET] Disconnected session={session_id}")
         if current_task and not current_task.done():
             current_task.cancel()
     except Exception as e:
-        print(f"WebSocket unhandled error: {e}")
+        logger.error(f"[WEBSOCKET] Unhandled error session={session_id}: {e}")

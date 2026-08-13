@@ -1,64 +1,87 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { AgentState } from '../types/voice';
 
-interface WebSocketHookProps {
+interface WebSocketProps {
   url: string;
-  onTranscript: (role: 'user' | 'ai', text: string) => void;
-  onAudioResponse: (audioBuffer: ArrayBuffer) => void;
+  onTranscript: (role: 'user' | 'ai' | 'tool' | 'system', text: string, turnId?: string, isPartial?: boolean, metrics?: any) => void;
+  onAudioResponse: (audioBuffer: ArrayBuffer, turnId?: string) => void;
   onStateChange: (state: AgentState) => void;
-  onError: (message: string) => void;
+  onError: (error: string) => void;
 }
 
-export function useWebSocket({ url, onTranscript, onAudioResponse, onStateChange, onError }: WebSocketHookProps) {
+export function useWebSocket({ url, onTranscript, onAudioResponse, onStateChange, onError }: WebSocketProps) {
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = 5;
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    const ws = new WebSocket(url);
-    ws.binaryType = 'arraybuffer'; // Very important for receiving audio bytes
-    
-    ws.onopen = () => {
-      setIsConnected(true);
-      console.log('WebSocket connected');
-    };
+    try {
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
 
-    ws.onmessage = (event) => {
-      if (event.data instanceof ArrayBuffer) {
-        onAudioResponse(event.data);
-      } else {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'status') {
-            onStateChange(data.status as AgentState);
-          } else if (data.type === 'transcript') {
-            onTranscript(data.role, data.text);
-          } else if (data.type === 'error') {
-            onError(data.message);
+      ws.onopen = () => {
+        setIsConnected(true);
+        reconnectAttempts.current = 0;
+        console.log('WebSocket connected');
+      };
+
+      ws.onmessage = async (event) => {
+        if (typeof event.data === 'string') {
+          try {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'status') {
+              onStateChange(data.status as AgentState);
+            } else if (data.type === 'transcript') {
+              onTranscript(data.role, data.text, data.turn_id, data.partial, data.metrics);
+            } else if (data.type === 'error') {
+              onError(data.message);
+            }
+          } catch (e) {
+            console.error('Failed to parse WebSocket message:', e);
           }
-        } catch (e) {
-          console.error('Failed to parse WebSocket message', e);
+        } else if (event.data instanceof Blob) {
+          const arrayBuffer = await event.data.arrayBuffer();
+          // We can't easily pass turn_id with binary data unless we prepend a header.
+          // For now, the active turn_id is managed by the frontend state in useVoiceAgent.
+          onAudioResponse(arrayBuffer);
         }
-      }
-    };
+      };
 
-    ws.onclose = () => {
+      ws.onclose = () => {
+        setIsConnected(false);
+        wsRef.current = null;
+        console.log('WebSocket disconnected');
+        
+        // Reconnection logic
+        if (reconnectAttempts.current < maxReconnectAttempts) {
+          const timeout = Math.pow(2, reconnectAttempts.current) * 1000;
+          setTimeout(() => {
+            reconnectAttempts.current += 1;
+            connect();
+          }, timeout);
+        } else {
+          onError("Connection lost. Please refresh the page.");
+        }
+      };
+
+      ws.onerror = () => {
+        // Handled by onclose usually, but can log here
+        console.error("WebSocket error occurred");
+      };
+    } catch (error) {
+      console.error('WebSocket connection error:', error);
       setIsConnected(false);
-      console.log('WebSocket disconnected');
-      // Simple reconnect logic
-      setTimeout(connect, 3000);
-    };
-
-    ws.onerror = () => {
-      onError('WebSocket connection error');
-    };
-
-    wsRef.current = ws;
+    }
   }, [url, onTranscript, onAudioResponse, onStateChange, onError]);
 
   const disconnect = useCallback(() => {
     if (wsRef.current) {
+      // Prevent auto-reconnect on intentional disconnect
+      reconnectAttempts.current = maxReconnectAttempts; 
       wsRef.current.close();
       wsRef.current = null;
     }
@@ -67,10 +90,8 @@ export function useWebSocket({ url, onTranscript, onAudioResponse, onStateChange
   const sendAudio = useCallback((audioBlob: Blob) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(audioBlob);
-    } else {
-      onError('Cannot send audio, not connected');
     }
-  }, [onError]);
+  }, []);
 
   const sendClear = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {

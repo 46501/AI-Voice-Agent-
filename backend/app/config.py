@@ -13,4 +13,17 @@ class Config:
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
     VAD_SILENCE_MS = int(os.getenv("VAD_SILENCE_MS", "800"))
     
+    # Database
+    # Default to sqlite for local direct running if postgres is not available
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./voxai.db")
+    
+    # Authentication
+    SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-key-change-in-production")
+    ALGORITHM = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 week
+    
+    # Tool APIs
+    WEATHER_API_KEY = os.getenv("WEATHER_API_KEY", "")
+    TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
+    
 config = Config()

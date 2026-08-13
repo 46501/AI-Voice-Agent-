@@ -1,65 +1,50 @@
-# VoxAI — Intelligent Voice Assistant
+# VoxAI - Intelligent Voice Assistant
 
-VoxAI is a modern, production-ready AI Voice Agent web application. It allows you to talk naturally with an AI agent using your microphone. 
+VoxAI is a production-grade, bidirectional AI voice assistant built with React, FastAPI, and OpenAI. It features ultra-low latency streaming, true barge-in (interruption), and a robust tool-calling architecture.
 
 ## Features
-- **Real-Time Voice Interaction:** Uses WebSockets for low-latency communication.
-- **Voice Activity Detection (VAD):** Automatically detects when you stop speaking.
-- **Modular AI Pipeline:** Integrates OpenAI Whisper (STT), GPT-4o-mini (LLM), and TTS.
-- **Tool Calling:** The agent can access external tools (Calculator, Weather, Time, Web Search) to augment its intelligence.
-- **Modern UI:** Premium SaaS-style interface with a responsive glassmorphic design and real-time audio visualization.
+
+- **Ultra-Low Latency:** Sentence-level chunking and streaming TTS means the AI starts speaking almost instantly.
+- **True Interruption (Barge-in):** Speak over the AI at any time. The system immediately halts playback, flushes the audio queue, and cancels backend generation tasks.
+- **Tool Registry:** The AI can autonomously use tools to fetch weather, search the web, calculate math, check the time, or save notes.
+- **Persistence:** PostgreSQL database stores users, conversations, and messages.
+- **Authentication:** JWT-based user authentication.
+- **Developer Metrics:** Live latency tracking (STT, LLM First Token, TTS, TTFB).
+- **Modern UI:** Premium SaaS-style interface with a Sidebar, Auth Modals, and an interactive VoiceOrb.
 
 ## Architecture
-- **Frontend:** React, TypeScript, Vite. Uses the Web Audio API for VAD and visualization.
-- **Backend:** Python, FastAPI. Provides real-time WebSocket orchestration.
 
-## Setup & Installation
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system diagrams and pipeline flow.
 
-### Prerequisites
-- Node.js (v18+)
-- Python 3.10+
-- OpenAI API Key
+## Prerequisites
 
-### 1. Backend Setup
-```bash
-cd backend
-python -m venv venv
-# Windows: .\venv\Scripts\Activate.ps1
-# Mac/Linux: source venv/bin/activate
-pip install -r requirements.txt
-```
+- Docker and Docker Compose
+- API Keys:
+  - OpenAI API Key (`OPENAI_API_KEY`)
+  - OpenWeather API Key (`WEATHER_API_KEY`) - *Optional*
+  - Tavily Search API Key (`TAVILY_API_KEY`) - *Optional*
 
-Create `.env` file in the `backend` folder based on `.env.example`:
-```
-OPENAI_API_KEY=your_key_here
-```
+## Quick Start (Docker)
 
-Run the backend:
-```bash
-uvicorn app.main:app --reload
-```
+1. Clone the repository.
+2. Copy `backend/.env.example` to `backend/.env` and add your API keys.
+3. Start the application using Docker Compose:
+   ```bash
+   docker-compose up --build
+   ```
+4. Access the frontend at `http://localhost:5173`.
+5. Access the backend API at `http://localhost:8000/docs`.
 
-### 2. Frontend Setup
-```bash
-cd frontend
-npm install
-npm run dev
-```
+## Local Development (Without Docker)
 
-### Docker Setup
-You can also run the entire application using Docker Compose:
-```bash
-# Ensure your backend/.env is populated with your API key first
-docker-compose up --build
-```
-*Note: Depending on your browser, accessing microphone via `http://localhost` might be restricted. If so, ensure you use `http://127.0.0.1` or set up HTTPS.*
+### Backend
+1. `cd backend`
+2. `python -m venv venv`
+3. Activate the virtual environment (`venv\Scripts\activate` on Windows).
+4. `pip install -r requirements.txt`
+5. `uvicorn app.main:app --reload`
 
-## API Endpoints
-- `GET /api/health` - Health check.
-- `POST /api/chat` - REST endpoint for testing text-based chat and tools.
-- `WS /ws/voice` - Primary WebSocket connection for voice streaming.
-
-## Future Improvements
-- Add persistent database (PostgreSQL) for session memory.
-- Implement more robust client-side VAD (e.g., using Silero VAD WASM).
-- Support for multiple LLM providers.
+### Frontend
+1. `cd frontend`
+2. `npm install`
+3. `npm run dev`

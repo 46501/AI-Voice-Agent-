@@ -1,0 +1,121 @@
+.orb-container {
+  position: relative;
+  width: 250px;
+  height: 250px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+  margin: 0 auto;
+}
+
+.orb-container:hover {
+  transform: scale(1.05);
+}
+
+.orb-core {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+  z-index: 10;
+  box-shadow: 0 0 30px rgba(168, 85, 247, 0.6);
+  transition: all 0.5s ease;
+}
+
+.orb-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.5s ease;
+}
+
+.ring-1 {
+  width: 160px;
+  height: 160px;
+  z-index: 5;
+}
+
+.ring-2 {
+  width: 200px;
+  height: 200px;
+  z-index: 4;
+}
+
+.orb-label {
+  position: absolute;
+  bottom: -40px;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #e2e8f0;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+/* States */
+.state-idle .orb-core {
+  animation: float 4s ease-in-out infinite;
+}
+.state-idle .ring-1, .state-idle .ring-2 {
+  opacity: 0.3;
+}
+
+.state-listening .orb-core {
+  transform: scale(1.1);
+  box-shadow: 0 0 50px rgba(236, 72, 153, 0.8);
+  animation: pulse 1.5s infinite alternate;
+}
+.state-listening .ring-1 {
+  border-color: rgba(236, 72, 153, 0.5);
+  animation: spin 3s linear infinite;
+}
+
+.state-thinking .orb-core {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  animation: spin 2s linear infinite;
+}
+.state-thinking .ring-1, .state-thinking .ring-2 {
+  border-style: dashed;
+  animation: spin-reverse 4s linear infinite;
+}
+
+.state-speaking .orb-core {
+  background: linear-gradient(135deg, #10b981, #3b82f6);
+  animation: pulse-fast 0.5s infinite alternate;
+  box-shadow: 0 0 40px rgba(16, 185, 129, 0.7);
+}
+.state-speaking .ring-1, .state-speaking .ring-2 {
+  border-color: rgba(16, 185, 129, 0.4);
+  animation: ripple 1s infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.15); }
+}
+
+@keyframes pulse-fast {
+  0% { transform: scale(1.05); }
+  100% { transform: scale(1.15); }
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes spin-reverse {
+  100% { transform: rotate(-360deg); }
+}
+
+@keyframes ripple {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.2); opacity: 0; }
+}

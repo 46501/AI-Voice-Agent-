@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   db:
@@ -7,8 +6,12 @@ services:
       POSTGRES_USER: voxai
       POSTGRES_PASSWORD: voxai_password
       POSTGRES_DB: voxai_db
+    # The internal PostgreSQL port is 5432 inside the container.
+    # We map it to a dedicated host port (default 5434) to avoid conflicts
+    # with other projects like quickvoice-dev-postgres (5432) or education_llm_db (5433).
+    # You can override this using the POSTGRES_HOST_PORT environment variable.
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5434}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 

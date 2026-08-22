@@ -159,22 +159,29 @@ async def process_voice_pipeline(websocket: WebSocket, session_id: str, turn_id:
         raise
     except Exception as e:
         logger.error(f"[VOICE] session={session_id} turn={turn_id} state=ERROR error='{e}'")
-        error_message = "Failed to process voice."
-        error_str = str(e)
+        error_code = "UNKNOWN_ERROR"
+        user_message = "Something went wrong while connecting to the AI. Please try again in a moment."
+        debug_message = str(e)
         
-        if "API key" in error_str or "invalid_api_key" in error_str or "401" in error_str:
-            error_message = "Configuration Error: Invalid OpenAI API Key. Please check backend/.env."
+        if "API key" in debug_message or "invalid_api_key" in debug_message or "401" in debug_message:
+            error_code = "INVALID_API_KEY"
+            user_message = "The AI service is temporarily unavailable. Please try again later."
         elif current_stage == "stt":
-            error_message = "I couldn't understand the audio. Please try again."
+            error_code = "STT_FAILED"
+            user_message = "I couldn't understand your voice. Please try again."
         elif current_stage == "llm":
-            error_message = "The AI couldn't generate a response. Please try again."
+            error_code = "LLM_FAILED"
+            user_message = "I couldn't generate a response right now. Please try again."
         elif current_stage == "tts":
-            error_message = "I generated a response but couldn't play the voice."
+            error_code = "TTS_FAILED"
+            user_message = "I generated a response but couldn't play the voice."
             
         await websocket.send_json({
             "type": "error", 
+            "code": error_code,
             "stage": current_stage,
-            "message": error_message, 
+            "user_message": user_message,
+            "debug_message": debug_message,
             "turn_id": turn_id
         })
 

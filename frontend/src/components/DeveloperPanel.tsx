@@ -1,17 +1,18 @@
 import React from 'react';
-import type { AgentState, LatencyMetrics } from '../types/voice';
+import type { AgentState, LatencyMetrics, ErrorState } from '../types/voice';
 import './DeveloperPanel.css';
 
 interface DeveloperPanelProps {
   state: AgentState;
   metrics: LatencyMetrics;
+  errorState: ErrorState | null;
   isConnected: boolean;
   isVisible: boolean;
   toggleVisibility: () => void;
 }
 
 export const DeveloperPanel: React.FC<DeveloperPanelProps> = ({ 
-  state, metrics, isConnected, isVisible, toggleVisibility 
+  state, metrics, errorState, isConnected, isVisible, toggleVisibility 
 }) => {
   if (!isVisible) {
     return (
@@ -65,6 +66,26 @@ export const DeveloperPanel: React.FC<DeveloperPanelProps> = ({
           <span>{metrics.total_ms ? `${metrics.total_ms}ms` : '--'}</span>
         </div>
       </div>
+      
+      {errorState && (
+        <div className="dev-section" style={{ marginTop: '16px', border: '1px solid #ef4444', backgroundColor: 'rgba(239,68,68,0.05)' }}>
+          <h4 style={{ color: '#ef4444' }}>Error Details</h4>
+          <div className="dev-stat">
+            <span>Stage:</span>
+            <span>{errorState.stage.toUpperCase()}</span>
+          </div>
+          <div className="dev-stat">
+            <span>Code:</span>
+            <span>{errorState.code}</span>
+          </div>
+          <div className="dev-stat" style={{ display: 'block', marginTop: '8px' }}>
+            <span style={{ display: 'block', marginBottom: '4px' }}>Debug Message:</span>
+            <span style={{ fontSize: '11px', opacity: 0.8, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+              {errorState.debug_message}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

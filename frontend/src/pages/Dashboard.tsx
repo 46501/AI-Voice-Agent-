@@ -20,16 +20,22 @@ export const Dashboard: React.FC = () => {
     state,
     messages,
     latencyMetrics,
-    errorMessage,
+    errorState,
     isConnected,
     isRecording,
     startConversation,
     stopConversation,
-    clearConversation
+    clearConversation,
+    clearError
   } = useVoiceAgent(websocketUrl);
 
   const handleStart = () => {
     startConversation();
+  };
+  
+  const handleTryAgain = () => {
+    clearError();
+    // Start listening again automatically when they try again, or they can just click the orb.
   };
 
   return (
@@ -45,6 +51,7 @@ export const Dashboard: React.FC = () => {
       <DeveloperPanel 
         state={state}
         metrics={latencyMetrics}
+        errorState={errorState}
         isConnected={isConnected}
         isVisible={isDevPanelOpen}
         toggleVisibility={() => setIsDevPanelOpen(!isDevPanelOpen)}
@@ -76,18 +83,45 @@ export const Dashboard: React.FC = () => {
               />
             </div>
             
-            {errorMessage && (
+            {errorState && (
               <div className="error-banner" style={{
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: '#ef4444',
-                padding: '12px 16px',
-                borderRadius: '8px',
+                backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                color: '#f87171',
+                padding: '16px',
+                borderRadius: '12px',
                 marginBottom: '20px',
                 textAlign: 'center',
-                fontWeight: 500,
-                border: '1px solid rgba(239, 68, 68, 0.2)'
+                border: '1px solid rgba(239, 68, 68, 0.1)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '12px',
+                maxWidth: '280px',
+                margin: '0 auto 20px auto'
               }}>
-                {errorMessage}
+                <div style={{ fontSize: '24px' }}>⚠️</div>
+                <div style={{ fontWeight: 500, fontSize: '15px', lineHeight: '1.4' }}>
+                  {errorState.user_message}
+                </div>
+                <button 
+                  onClick={handleTryAgain}
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    color: '#f87171',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '20px',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    marginTop: '4px',
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
+                  onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
+                >
+                  Try Again
+                </button>
               </div>
             )}
             

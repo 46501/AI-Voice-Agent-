@@ -6,7 +6,7 @@ interface WebSocketProps {
   onTranscript: (role: 'user' | 'ai' | 'tool' | 'system', text: string, turnId?: string, isPartial?: boolean, metrics?: any) => void;
   onAudioResponse: (audioBuffer: ArrayBuffer) => void;
   onStateChange: (state: AgentState) => void;
-  onError: (error: string) => void;
+  onError: (error: import('../types/voice').ErrorState) => void;
 }
 
 export function useWebSocket({ url, onTranscript, onAudioResponse, onStateChange, onError }: WebSocketProps) {
@@ -38,7 +38,12 @@ export function useWebSocket({ url, onTranscript, onAudioResponse, onStateChange
             } else if (data.type === 'transcript') {
               onTranscript(data.role, data.text, data.turn_id, data.partial, data.metrics);
             } else if (data.type === 'error') {
-              onError(data.message);
+              onError({
+                code: data.code || 'UNKNOWN_ERROR',
+                stage: data.stage || 'unknown',
+                user_message: data.user_message || data.message || 'An unknown error occurred.',
+                debug_message: data.debug_message || data.message || ''
+              });
             }
           } catch (e) {
             console.error('Failed to parse WebSocket message:', e);
@@ -64,7 +69,12 @@ export function useWebSocket({ url, onTranscript, onAudioResponse, onStateChange
             connect();
           }, timeout);
         } else {
-          onError("Connection lost. Please refresh the page.");
+          onError({
+            code: 'WEBSOCKET_FAILED',
+            stage: 'connection',
+            user_message: 'Connection lost. Please refresh the page.',
+            debug_message: 'Max reconnect attempts reached.'
+          });
         }
       };
 

@@ -7,7 +7,7 @@ export function useVoiceAgent(websocketUrl: string) {
   const [state, setState] = useState<AgentState>('idle');
   const [messages, setMessages] = useState<Message[]>([]);
   const [latencyMetrics, setLatencyMetrics] = useState<LatencyMetrics>({});
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorState, setErrorState] = useState<import('../types/voice').ErrorState | null>(null);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -94,14 +94,11 @@ export function useVoiceAgent(websocketUrl: string) {
       setState(newState);
   }, []);
 
-  const handleError = useCallback((msg: string) => {
-    console.error("Voice Agent Error:", msg);
-    setErrorMessage(msg);
+  const handleError = useCallback((err: import('../types/voice').ErrorState) => {
+    console.error("Voice Agent Error:", err.debug_message);
+    setErrorState(err);
     setState('error');
-    setTimeout(() => {
-        setState('idle');
-        setErrorMessage(null);
-    }, 4000);
+    // We don't automatically clear the error state anymore since we want the user to click "Try Again"
   }, []);
 
   const { isConnected, sendAudio, sendClear, sendInterrupt } = useWebSocket({
@@ -235,11 +232,15 @@ export function useVoiceAgent(websocketUrl: string) {
     state,
     messages,
     latencyMetrics,
-    errorMessage,
+    errorState,
     isConnected,
     isRecording,
     startConversation,
     stopConversation,
-    clearConversation
+    clearConversation,
+    clearError: () => {
+      setErrorState(null);
+      setState('idle');
+    }
   };
 }

@@ -26,6 +26,13 @@ export interface Message {
   isPartial?: boolean;
 }
 
+export interface ErrorState {
+  code: string;
+  stage: string;
+  user_message: string;
+  debug_message: string;
+}
+
 export interface Conversation {
   id: string;
   title: string;

@@ -17,6 +17,7 @@ tts_service = TTSService()
 SENTENCE_END_REGEX = re.compile(r'([.?!]["\']?)')
 
 async def process_voice_pipeline(websocket: WebSocket, session_id: str, turn_id: str, audio_data: bytes):
+    current_stage = "stt"
     try:
         t0 = time.time()
         logger.info(f"[VOICE] session={session_id} turn={turn_id} state=STT_START")
@@ -40,6 +41,7 @@ async def process_voice_pipeline(websocket: WebSocket, session_id: str, turn_id:
             return
 
         # 2. LLM Stream
+        current_stage = "llm"
         await websocket.send_json({"type": "status", "status": "thinking", "turn_id": turn_id})
         logger.info(f"[VOICE] session={session_id} turn={turn_id} state=LLM_START")
         
@@ -55,6 +57,7 @@ async def process_voice_pipeline(websocket: WebSocket, session_id: str, turn_id:
                 return None
             try:
                 t_tts_start = time.time()
+                current_stage = "tts"
                 audio_bytes = await tts_service.synthesize(text_chunk)
                 tts_latency = int((time.time() - t_tts_start) * 1000)
                 logger.info(f"[VOICE] session={session_id} turn={turn_id} chunk={chunk_index} state=TTS_DONE latency={tts_latency}ms text='{text_chunk}'")
@@ -156,7 +159,24 @@ async def process_voice_pipeline(websocket: WebSocket, session_id: str, turn_id:
         raise
     except Exception as e:
         logger.error(f"[VOICE] session={session_id} turn={turn_id} state=ERROR error='{e}'")
-        await websocket.send_json({"type": "error", "message": "Failed to process voice.", "turn_id": turn_id})
+        error_message = "Failed to process voice."
+        error_str = str(e)
+        
+        if "API key" in error_str or "invalid_api_key" in error_str or "401" in error_str:
+            error_message = "Configuration Error: Invalid OpenAI API Key. Please check backend/.env."
+        elif current_stage == "stt":
+            error_message = "I couldn't understand the audio. Please try again."
+        elif current_stage == "llm":
+            error_message = "The AI couldn't generate a response. Please try again."
+        elif current_stage == "tts":
+            error_message = "I generated a response but couldn't play the voice."
+            
+        await websocket.send_json({
+            "type": "error", 
+            "stage": current_stage,
+            "message": error_message, 
+            "turn_id": turn_id
+        })
 
 @router.websocket("/voice")
 async def voice_websocket(websocket: WebSocket):

@@ -7,6 +7,7 @@ export function useVoiceAgent(websocketUrl: string) {
   const [state, setState] = useState<AgentState>('idle');
   const [messages, setMessages] = useState<Message[]>([]);
   const [latencyMetrics, setLatencyMetrics] = useState<LatencyMetrics>({});
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -94,9 +95,13 @@ export function useVoiceAgent(websocketUrl: string) {
   }, []);
 
   const handleError = useCallback((msg: string) => {
-    console.error(msg);
+    console.error("Voice Agent Error:", msg);
+    setErrorMessage(msg);
     setState('error');
-    setTimeout(() => setState('idle'), 3000);
+    setTimeout(() => {
+        setState('idle');
+        setErrorMessage(null);
+    }, 4000);
   }, []);
 
   const { isConnected, sendAudio, sendClear, sendInterrupt } = useWebSocket({
@@ -230,6 +235,7 @@ export function useVoiceAgent(websocketUrl: string) {
     state,
     messages,
     latencyMetrics,
+    errorMessage,
     isConnected,
     isRecording,
     startConversation,

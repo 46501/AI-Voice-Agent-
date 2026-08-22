@@ -20,6 +20,7 @@ export const Dashboard: React.FC = () => {
     state,
     messages,
     latencyMetrics,
+    errorMessage,
     isConnected,
     isRecording,
     startConversation,
@@ -74,6 +75,21 @@ export const Dashboard: React.FC = () => {
                 onClick={isRecording ? stopConversation : handleStart} 
               />
             </div>
+            
+            {errorMessage && (
+              <div className="error-banner" style={{
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                color: '#ef4444',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                marginBottom: '20px',
+                textAlign: 'center',
+                fontWeight: 500,
+                border: '1px solid rgba(239, 68, 68, 0.2)'
+              }}>
+                {errorMessage}
+              </div>
+            )}
             
             <div className="controls-section">
               <button 

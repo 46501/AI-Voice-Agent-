@@ -2,19 +2,15 @@ import React, { useState } from 'react';
 import { VoiceOrb } from '../components/VoiceOrb';
 import { ConversationPanel } from '../components/ConversationPanel';
 import { Sidebar } from '../components/Sidebar';
-import { AuthModal } from '../components/AuthModal';
 import { DeveloperPanel } from '../components/DeveloperPanel';
 import { useVoiceAgent } from '../hooks/useVoiceAgent';
-import { useAuth } from '../context/AuthContext';
 import { Mic, MicOff, Trash2, Settings, Activity, Menu } from 'lucide-react';
 import './Dashboard.css';
 
 export const Dashboard: React.FC = () => {
   const websocketUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/voice';
   
-  const { user } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
   
   // Hardcoded for now until backend conversation sync is implemented on frontend
@@ -32,10 +28,6 @@ export const Dashboard: React.FC = () => {
   } = useVoiceAgent(websocketUrl);
 
   const handleStart = () => {
-    if (!user) {
-      setIsAuthModalOpen(true);
-      return;
-    }
     startConversation();
   };
 
@@ -49,9 +41,6 @@ export const Dashboard: React.FC = () => {
         onSelectConversation={(id) => console.log('Selected', id)}
         onNewConversation={clearConversation}
       />
-      
-      {isAuthModalOpen && <AuthModal onClose={() => setIsAuthModalOpen(false)} />}
-      
       <DeveloperPanel 
         state={state}
         metrics={latencyMetrics}
@@ -70,11 +59,6 @@ export const Dashboard: React.FC = () => {
             <h1>VoxAI</h1>
           </div>
           <div className="header-actions">
-            {!user && (
-              <button className="login-btn-header" onClick={() => setIsAuthModalOpen(true)}>
-                Login
-              </button>
-            )}
             <div className={`status-badge ${isConnected ? 'connected' : 'disconnected'}`}>
               {isConnected ? 'Connected' : 'Disconnected'}
             </div>

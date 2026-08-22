@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Conversation } from '../types/voice';
-import { useAuth } from '../context/AuthContext';
+import { MessageSquare, Plus, X } from 'lucide-react';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -20,19 +20,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   setIsOpen
 }) => {
-  const { user, logout } = useAuth();
-
   return (
     <div className={`sidebar ${isOpen ? 'open' : 'closed'}`}>
       <div className="sidebar-header">
         <h2>VoxAI</h2>
         <button className="close-sidebar-btn" onClick={() => setIsOpen(false)}>
-          &times;
+          <X size={20} />
         </button>
       </div>
 
       <button className="new-chat-btn" onClick={onNewConversation}>
-        + New Conversation
+        <Plus size={18} /> New Conversation
       </button>
 
       <div className="conversations-list">
@@ -46,26 +44,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className={`conversation-item ${activeConversationId === conv.id ? 'active' : ''}`}
               onClick={() => onSelectConversation(conv.id)}
             >
-              <span className="chat-icon">💬</span>
+              <MessageSquare size={16} />
               <span className="chat-title">{conv.title}</span>
             </div>
           ))
-        )}
-      </div>
-
-      <div className="sidebar-footer">
-        {user ? (
-          <div className="user-profile">
-            <div className="user-info">
-              <span className="user-name">{user.name || 'User'}</span>
-              <span className="user-email">{user.email}</span>
-            </div>
-            <button className="logout-btn" onClick={logout}>Logout</button>
-          </div>
-        ) : (
-          <div className="auth-links">
-            <button className="login-btn">Login</button>
-          </div>
         )}
       </div>
     </div>

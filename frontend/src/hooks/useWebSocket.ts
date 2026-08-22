@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { AgentState } from '../types/voice';
+import type { AgentState } from '../types/voice';
 
 interface WebSocketProps {
   url: string;
   onTranscript: (role: 'user' | 'ai' | 'tool' | 'system', text: string, turnId?: string, isPartial?: boolean, metrics?: any) => void;
-  onAudioResponse: (audioBuffer: ArrayBuffer, turnId?: string) => void;
+  onAudioResponse: (audioBuffer: ArrayBuffer) => void;
   onStateChange: (state: AgentState) => void;
   onError: (error: string) => void;
 }

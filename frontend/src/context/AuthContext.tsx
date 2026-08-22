@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User } from '../types/voice';
+import type { User } from '../types/voice';
 
 interface AuthContextType {
   token: string | null;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { AgentState } from '../types/voice';
+import type { AgentState } from '../types/voice';
 import './VoiceOrb.css';
 
 interface VoiceOrbProps {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { AgentState, LatencyMetrics } from '../types/voice';
+import type { AgentState, LatencyMetrics } from '../types/voice';
 import './DeveloperPanel.css';
 
 interface DeveloperPanelProps {

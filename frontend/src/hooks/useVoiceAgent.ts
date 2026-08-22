@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAudioRecorder } from './useAudioRecorder';
 import { useWebSocket } from './useWebSocket';
-import { AgentState, Message, LatencyMetrics } from '../types/voice';
+import type { AgentState, Message, LatencyMetrics } from '../types/voice';
 
 export function useVoiceAgent(websocketUrl: string) {
   const [state, setState] = useState<AgentState>('idle');
@@ -75,7 +75,7 @@ export function useVoiceAgent(websocketUrl: string) {
     });
   }, []);
 
-  const handleAudioResponse = useCallback((audioBuffer: ArrayBuffer, turnId?: string) => {
+  const handleAudioResponse = useCallback((audioBuffer: ArrayBuffer) => {
     // If we have a way to verify turnId against activeTurnIdRef, we do it here.
     // For now, if we receive audio and we are interrupted, we ignore it.
     if (state === 'interrupted' || state === 'listening') return;

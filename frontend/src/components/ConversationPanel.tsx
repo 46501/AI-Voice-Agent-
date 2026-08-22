@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Message } from '../types/voice';
+import type { Message } from '../types/voice';
 import { Wrench, CheckCircle } from 'lucide-react';
 import './ConversationPanel.css';
 
@@ -16,15 +16,7 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({ messages }
     }
   }, [messages]);
 
-  const renderToolMessage = (msg: Message) => {
-    // Try to extract a clean tool name
-    let toolName = "Tool";
-    try {
-      // In the backend we send name="weather_tool" or something similar
-      // Actually we send the raw function_name as name in the payload. Let's see if it's there.
-      // Wait, we need to pass `name` from backend in transcript payload if it's a tool.
-      // We didn't do that. I'll just use the role label for now.
-    } catch(e) {}
+  const renderToolMessage = () => {
 
     return (
       <div className="tool-message">
@@ -49,7 +41,7 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({ messages }
         messages.map((msg) => (
           <div key={msg.id} className={`message-wrapper ${msg.role}`}>
             {msg.role === 'tool' ? (
-              renderToolMessage(msg)
+              renderToolMessage()
             ) : (
               <div className={`message-bubble ${msg.role}`}>
                 <span className="message-role">{msg.role === 'user' ? 'You' : 'VoxAI'}</span>

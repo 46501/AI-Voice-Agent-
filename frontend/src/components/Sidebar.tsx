@@ -1,5 +1,5 @@
 import React from 'react';
-import { Conversation } from '../types/voice';
+import type { Conversation } from '../types/voice';
 import { useAuth } from '../context/AuthContext';
 import './Sidebar.css';
 

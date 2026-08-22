@@ -12,6 +12,11 @@ export function useVoiceAgent(websocketUrl: string) {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const silenceTimeoutRef = useRef<number | null>(null);
   const isSpeakingRef = useRef(false);
+  const stateRef = useRef<AgentState>(state);
+  
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
   
   const audioQueueRef = useRef<ArrayBuffer[]>([]);
   const isPlayingRef = useRef(false);
@@ -76,18 +81,22 @@ export function useVoiceAgent(websocketUrl: string) {
   }, []);
 
   const handleAudioResponse = useCallback((audioBuffer: ArrayBuffer) => {
-    // If we have a way to verify turnId against activeTurnIdRef, we do it here.
-    // For now, if we receive audio and we are interrupted, we ignore it.
-    if (state === 'interrupted' || state === 'listening') return;
+    if (stateRef.current === 'interrupted' || stateRef.current === 'listening') return;
     
     audioQueueRef.current.push(audioBuffer);
     if (!isPlayingRef.current) {
       playNextInQueue();
     }
-  }, [playNextInQueue, state]);
+  }, [playNextInQueue]);
 
   const handleStateChange = useCallback((newState: AgentState) => {
       setState(newState);
+  }, []);
+
+  const handleError = useCallback((msg: string) => {
+    console.error(msg);
+    setState('error');
+    setTimeout(() => setState('idle'), 3000);
   }, []);
 
   const { isConnected, sendAudio, sendClear, sendInterrupt } = useWebSocket({
@@ -95,11 +104,7 @@ export function useVoiceAgent(websocketUrl: string) {
     onTranscript: handleTranscript,
     onAudioResponse: handleAudioResponse,
     onStateChange: handleStateChange,
-    onError: (msg) => {
-      console.error(msg);
-      setState('error');
-      setTimeout(() => setState('idle'), 3000);
-    }
+    onError: handleError
   });
 
   const stopPlaybackAndClearQueue = useCallback(() => {
@@ -161,7 +166,7 @@ export function useVoiceAgent(websocketUrl: string) {
         if (!isSpeakingRef.current) {
           isSpeakingRef.current = true;
           
-          if (isPlayingRef.current || state === 'speaking' || state === 'thinking') {
+          if (isPlayingRef.current || stateRef.current === 'speaking' || stateRef.current === 'thinking') {
             console.log("Barge-in detected! Interrupting AI...");
             stopPlaybackAndClearQueue();
             sendInterrupt();
@@ -201,7 +206,7 @@ export function useVoiceAgent(websocketUrl: string) {
       if (silenceTimeoutRef.current) window.clearTimeout(silenceTimeoutRef.current);
       try { source.disconnect(); } catch (e) {}
     };
-  }, [isRecording, stream, stopRecording, stopPlaybackAndClearQueue, sendInterrupt, state]);
+  }, [isRecording, stream, stopRecording, stopPlaybackAndClearQueue, sendInterrupt]);
 
   const startConversation = useCallback(() => {
     setState('listening');
